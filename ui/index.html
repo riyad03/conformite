@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GRC Conformité</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;background:#f4f6f9;color:#1a1a1a;min-height:100vh}
+
+  header{background:#c0392b;padding:14px 28px;display:flex;align-items:center;gap:16px}
+  header h1{color:#fff;font-size:1.2em;font-weight:900;letter-spacing:1px}
+  header span{color:#ffcccc;font-size:.82em}
+
+  main{display:grid;grid-template-columns:320px 1fr;gap:18px;padding:20px 24px;max-width:1440px;margin:0 auto}
+
+  .panel{background:#fff;border-radius:10px;box-shadow:0 1px 4px #0001;padding:18px}
+  .panel h2{font-size:.92em;font-weight:700;color:#c0392b;margin-bottom:12px;border-bottom:2px solid #f0f0f0;padding-bottom:8px;display:flex;align-items:center;gap:6px}
+
+  /* collapsible section */
+  .section-toggle{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
+  .section-toggle .chevron{font-size:.75em;color:#aaa;transition:transform .2s}
+  .section-toggle.open .chevron{transform:rotate(90deg)}
+  .section-body{display:none;margin-top:10px}
+  .section-body.open{display:block}
+
+  /* upload zone */
+  .drop-zone{border:2px dashed #ddd;border-radius:7px;padding:14px;text-align:center;color:#aaa;font-size:.8em;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:10px;position:relative}
+  .drop-zone:hover,.drop-zone.drag-over{border-color:#c0392b;background:#fdf5f5;color:#c0392b}
+  .drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .drop-zone .icon{font-size:1.4em;margin-bottom:3px}
+  .upload-status{font-size:.76em;margin-top:4px;min-height:15px}
+  .ok{color:#27ae60} .err{color:#e74c3c}
+
+  /* file list */
+  .file-list{display:flex;flex-direction:column;gap:5px;max-height:150px;overflow-y:auto;margin-bottom:10px}
+  .file-item{display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid #e8e8e8;border-radius:5px;cursor:pointer;font-size:.82em}
+  .file-item:hover{background:#fef5f5}
+  .file-item input{accent-color:#c0392b;flex-shrink:0}
+  .file-item label{flex:1;cursor:pointer;line-height:1.3}
+  .file-item.checked{background:#fdf0f0;border-color:#c0392b44}
+  .new-badge{background:#27ae60;color:#fff;font-size:.6em;padding:1px 4px;border-radius:3px;font-weight:bold}
+
+  /* proc list */
+  #proc-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:12px}
+
+  /* select text */
+  select,input[type=text]{width:100%;padding:7px 9px;border:1px solid #ddd;border-radius:5px;font-size:.83em;margin-bottom:8px}
+  select:focus,input[type=text]:focus{outline:none;border-color:#c0392b}
+
+  /* textarea for prompts */
+  textarea{width:100%;padding:7px 9px;border:1px solid #ddd;border-radius:5px;font-size:.78em;font-family:monospace;resize:vertical;min-height:90px;margin-bottom:6px}
+  textarea:focus{outline:none;border-color:#c0392b}
+  .prompt-label{font-size:.78em;font-weight:bold;color:#555;margin-bottom:4px;margin-top:8px}
+
+  /* buttons */
+  button{cursor:pointer;border:none;border-radius:6px;font-size:.86em;font-weight:bold;transition:opacity .15s}
+  button:hover{opacity:.85}
+  #btn-analyse{width:100%;padding:11px;background:#c0392b;color:#fff;margin-top:4px}
+  #btn-analyse:disabled{background:#aaa;cursor:not-allowed;opacity:1}
+  .btn-sm{font-size:.76em;background:#f0f0f0;color:#555;padding:4px 8px}
+
+  /* ── progress bar ── */
+  #progress-bar-wrap{display:none;margin-bottom:14px}
+  .progress-step{font-size:.8em;color:#555;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+  .progress-step strong{color:#1a1a1a}
+  .progress-track{background:#ecf0f1;border-radius:6px;height:10px;overflow:hidden}
+  .progress-fill{height:100%;background:#2980b9;border-radius:6px;transition:width .4s ease}
+  .sub-progress{margin-top:8px;font-size:.76em;color:#555;display:flex;align-items:center;gap:8px;background:#fef9f0;border:1px solid #f0d9b0;border-radius:6px;padding:6px 10px}
+  .sub-track{flex:1;background:#ecf0f1;border-radius:4px;height:8px;overflow:hidden}
+  .sub-fill{height:100%;background:#e67e22;border-radius:4px;transition:width .25s ease}
+
+  /* ── pipeline graph ── */
+  #graph-panel{display:none}
+  .pipeline{display:flex;align-items:center;overflow-x:auto;padding:16px 2px 8px}
+  .p-node{display:flex;flex-direction:column;align-items:center;min-width:96px;flex-shrink:0}
+  .p-node-box{width:86px;height:62px;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:2px solid #ddd;background:#f8f9fa;font-size:.7em;font-weight:bold;color:#666;text-align:center;transition:all .3s;position:relative;padding:4px}
+  .p-node-box .icon{font-size:1.35em}
+  .p-node-box .lbl{font-size:.76em;line-height:1.2}
+  .p-node-box .status-dot{position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%}
+  .pending .status-dot{background:#ccc}
+  .running{border-color:#2980b9;background:#eaf4fb;color:#1a3a5c;animation:pulse 1.2s infinite}
+  .running .status-dot{background:#2980b9;animation:blink .8s infinite}
+  .done{border-color:#27ae60;background:#eafaf1;color:#1a5c2a}
+  .done .status-dot{background:#27ae60}
+  .error{border-color:#e74c3c;background:#fdf0f0;color:#5c1a1a}
+  .error .status-dot{background:#e74c3c}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 #2980b940}50%{box-shadow:0 0 0 6px #2980b920}}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .p-arrow{color:#bbb;font-size:1.1em;padding:0 1px;margin-top:-14px;flex-shrink:0}
+
+  /* ── log ── */
+  #log-panel{display:none;margin-top:14px}
+  #log-list{display:flex;flex-direction:column;gap:6px;max-height:380px;overflow-y:auto;padding-right:3px}
+  .log-entry{border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;font-size:.8em}
+  .log-header{display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;background:#fafafa}
+  .log-header:hover{background:#f0f0f0}
+  .log-node-tag{padding:2px 7px;border-radius:3px;font-size:.72em;font-weight:bold;color:#fff;white-space:nowrap}
+  .log-type{font-size:.76em;color:#888;flex:1}
+  .log-chevron{color:#aaa;transition:transform .2s;font-size:.82em}
+  .log-entry.open .log-chevron{transform:rotate(90deg)}
+  .log-body{display:none;padding:8px 10px;background:#fff;border-top:1px solid #f0f0f0}
+  .log-entry.open .log-body{display:block}
+  .log-body pre{font-size:.75em;white-space:pre-wrap;word-break:break-all;color:#333;max-height:240px;overflow-y:auto;background:#f8f9fa;padding:7px;border-radius:4px;line-height:1.45}
+  .log-section{font-size:.72em;font-weight:bold;color:#888;margin:5px 0 2px}
+
+  /* ── results ── */
+  #results{display:none;flex-direction:column;gap:14px;margin-top:14px}
+  .result-card{background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px #0001}
+  .result-card-header{padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid #f0f0f0}
+  .result-card-header h3{font-size:.9em;flex:1;min-width:130px}
+  .result-card-body{padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px}
+  .score-wrap{grid-column:1/-1}
+  .score-label{font-size:.73em;color:#888;margin-bottom:3px}
+  .gauge-track{background:#ecf0f1;border-radius:5px;height:19px;overflow:hidden}
+  .gauge-fill{height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:.78em;transition:width .6s ease}
+  .stat{background:#f8f9fa;border-radius:5px;padding:8px;text-align:center}
+  .stat-n{font-size:1.6em;font-weight:900}
+  .stat-label{font-size:.68em;color:#666;margin-top:2px}
+  .badge{padding:2px 8px;border-radius:4px;font-size:.74em;font-weight:bold;color:#fff;white-space:nowrap}
+  .resume-box{grid-column:1/-1;background:#f0f4f8;border-left:4px solid #2980b9;padding:10px 13px;border-radius:4px;font-size:.8em;line-height:1.6;color:#333}
+  .report-link{display:inline-flex;align-items:center;gap:4px;font-size:.78em;color:#2980b9;text-decoration:none;font-weight:bold}
+  .report-link:hover{text-decoration:underline}
+
+  #error-box{display:none;background:#fdf0f0;border:1px solid #e74c3c44;border-radius:7px;padding:12px 16px;color:#c0392b;font-size:.84em;margin-bottom:10px}
+
+  @media(max-width:750px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>BFS CONSULTING</h1>
+    <span>Governance &bull; Risk &bull; Compliance</span>
+  </div>
+</header>
+
+<main>
+<!-- ══ LEFT PANEL ══════════════════════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;gap:14px">
+
+  <!-- procedures -->
+  <div class="panel">
+    <h2>📂 Procédures</h2>
+    <div class="drop-zone" id="dz-proc" ondragover="dzOver(event,'dz-proc')" ondragleave="dzLeave('dz-proc')" ondrop="dzDrop(event,'dz-proc',uploadProc)">
+      <input type="file" accept=".pdf" onchange="onFile(event,uploadProc)">
+      <div class="icon">📄</div>Glissez un PDF ou cliquez
+    </div>
+    <div id="upload-proc-status" class="upload-status"></div>
+    <button class="btn-sm" style="margin-bottom:8px" onclick="toggleAll('proc-list')">Tout sélectionner</button>
+    <div id="proc-list"><p style="color:#aaa;font-size:.8em">Chargement…</p></div>
+  </div>
+
+  <!-- referentiel -->
+  <div class="panel">
+    <h2 class="section-toggle" onclick="toggleSection('ref-body',this)">
+      📋 Référentiel <span class="chevron">›</span>
+    </h2>
+    <div id="ref-body" class="section-body">
+      <div class="drop-zone" id="dz-ref" ondragover="dzOver(event,'dz-ref')" ondragleave="dzLeave('dz-ref')" ondrop="dzDrop(event,'dz-ref',uploadRef)">
+        <input type="file" accept=".xlsx,.xls" onchange="onFile(event,uploadRef)">
+        <div class="icon">📊</div>Glissez un Excel ou cliquez
+      </div>
+      <div id="upload-ref-status" class="upload-status"></div>
+      <div id="ref-list" class="file-list"></div>
+      <p style="font-size:.76em;color:#888">Aucune sélection = référentiel par défaut</p>
+    </div>
+  </div>
+
+  <!-- context docs -->
+  <div class="panel">
+    <h2 class="section-toggle" onclick="toggleSection('ctx-body',this)">
+      📎 Contexte additionnel <span class="chevron">›</span>
+    </h2>
+    <div id="ctx-body" class="section-body">
+      <div class="drop-zone" id="dz-ctx" ondragover="dzOver(event,'dz-ctx')" ondragleave="dzLeave('dz-ctx')" ondrop="dzDrop(event,'dz-ctx',uploadCtx)">
+        <input type="file" onchange="onFile(event,uploadCtx)">
+        <div class="icon">📎</div>Glissez un fichier ou cliquez
+      </div>
+      <div id="upload-ctx-status" class="upload-status"></div>
+      <div id="ctx-list" class="file-list"></div>
+    </div>
+  </div>
+
+  <!-- agent system prompts -->
+  <div class="panel">
+    <h2 class="section-toggle" onclick="toggleSection('prompts-body',this)">
+      🤖 Prompts agents <span class="chevron">›</span>
+    </h2>
+    <div id="prompts-body" class="section-body">
+      <p style="font-size:.76em;color:#888;margin-bottom:8px">Modifier pour personnaliser le comportement de chaque agent.</p>
+      <div id="prompts-container"><p style="color:#aaa;font-size:.8em">Chargement…</p></div>
+    </div>
+  </div>
+
+  <button id="btn-analyse" onclick="runAnalyse()" disabled>Analyser</button>
+</div>
+
+<!-- ══ RIGHT PANEL ═════════════════════════════════════════════════════════ -->
+<div>
+  <div class="panel">
+    <h2>Pipeline d'analyse</h2>
+    <div id="error-box"></div>
+    <!-- overall progress -->
+    <div id="progress-bar-wrap">
+      <div class="progress-step">
+        <span>Étape <strong id="step-current">0</strong> / <strong id="step-total">6</strong> — <strong id="step-name">Démarrage…</strong></span>
+        <span id="step-pct" style="color:#2980b9;font-weight:bold"></span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="sub-progress" id="sub-progress" style="display:none">
+        <span id="sub-label" style="white-space:nowrap"></span>
+        <div class="sub-track"><div class="sub-fill" id="sub-fill" style="width:0%"></div></div>
+        <span id="sub-pct" style="color:#e67e22;font-weight:bold;white-space:nowrap"></span>
+      </div>
+    </div>
+
+    <div id="graph-panel"><div class="pipeline" id="pipeline-graph"></div></div>
+    <div id="empty" style="text-align:center;padding:46px 0;color:#bbb;font-size:.86em">
+      <div style="font-size:2em;margin-bottom:9px">📋</div>
+      Sélectionnez des procédures et cliquez sur <strong>Analyser</strong>.
+    </div>
+  </div>
+
+  <div class="panel" id="log-panel">
+    <h2>Journal des agents <span id="log-count" style="color:#aaa;font-weight:normal;font-size:.82em"></span></h2>
+    <div id="log-list"></div>
+  </div>
+
+  <div id="results"></div>
+</div>
+</main>
+
+<script>
+const C_LEV = {Conforme:"#27ae60","Partiellement conforme":"#f39c12","Non conforme":"#e74c3c"};
+const NODE_META = {
+  extraction_all:       {icon:"📄",label:"Extraction"},
+  summarizer:           {icon:"📝",label:"Summarizer"},
+  formatter:            {icon:"🔧",label:"Formatter"},
+  validate_all:         {icon:"🔍",label:"Validateur"},
+  analyse_evaluate_all: {icon:"🧠",label:"Analyste +\nEvaluateur"},
+  rapport_all:          {icon:"📊",label:"Rapports"},
+};
+const NODE_ORDER = Object.keys(NODE_META);
+const NODE_COLORS = {
+  extraction_all:"#8e44ad",summarizer:"#2980b9",formatter:"#16a085",
+  validate_all:"#e67e22",analyse_evaluate_all:"#c0392b",rapport_all:"#27ae60",
+};
+
+let newlyUploaded = new Set();
+let selectedRef   = null;
+let selectedCtx   = new Set();
+let logCount      = 0;
+let _activeNode   = null;   // track currently running node to infer completion
+
+// ── drag & drop helpers ───────────────────────────────────────────────────────
+function dzOver(e,id){e.preventDefault();document.getElementById(id).classList.add("drag-over")}
+function dzLeave(id){document.getElementById(id).classList.remove("drag-over")}
+function dzDrop(e,id,fn){e.preventDefault();dzLeave(id);fn(e.dataTransfer.files[0])}
+function onFile(e,fn){fn(e.target.files[0]);e.target.value=""}
+
+// ── collapsible sections ──────────────────────────────────────────────────────
+function toggleSection(bodyId,toggle){
+  const body=document.getElementById(bodyId);
+  const open=body.classList.toggle("open");
+  toggle.classList.toggle("open",open);
+}
+
+// ── procedures ────────────────────────────────────────────────────────────────
+async function uploadProc(file){
+  if(!file)return;
+  if(!file.name.toLowerCase().endsWith(".pdf")){setStatus("upload-proc-status","PDF uniquement.",false);return}
+  setStatus("upload-proc-status","Envoi…",null);
+  const fd=new FormData();fd.append("file",file);
+  try{
+    const res=await fetch("/procedures/upload",{method:"POST",body:fd});
+    if(!res.ok){const e=await res.json();throw new Error(e.detail)}
+    const item=await res.json();
+    setStatus("upload-proc-status",`✓ "${item.title}" ajoutée`,true);
+    newlyUploaded.add(item.title);
+    await loadProcedures(item.title);
+  }catch(e){setStatus("upload-proc-status","Erreur : "+e.message,false)}
+}
+
+async function loadProcedures(autoCheck=null){
+  const keep=new Set([...document.querySelectorAll("#proc-list .file-item input:checked")].map(c=>c.value));
+  if(autoCheck)keep.add(autoCheck);
+  const list=await fetch("/procedures").then(r=>r.json());
+  const el=document.getElementById("proc-list");
+  if(!list.length){el.innerHTML='<p style="color:#aaa;font-size:.8em">Aucune procédure.</p>';updateBtn();return}
+  el.innerHTML=list.map(p=>{
+    const checked=keep.has(p.title);
+    return `<div class="file-item${checked?" checked":""}" onclick="handleClick(event,this)">
+      <input type="checkbox" value="${p.title}"${checked?" checked":""}>
+      <label>${p.title}</label>
+      ${newlyUploaded.has(p.title)?'<span class="new-badge">NEW</span>':""}
+    </div>`;
+  }).join("");
+  syncToggle("proc-list"); updateBtn();
+}
+
+// ── referentiel ───────────────────────────────────────────────────────────────
+async function uploadRef(file){
+  if(!file)return;
+  if(!file.name.toLowerCase().match(/\.xlsx?$/)){setStatus("upload-ref-status","Excel uniquement.",false);return}
+  setStatus("upload-ref-status","Envoi…",null);
+  const fd=new FormData();fd.append("file",file);
+  try{
+    const res=await fetch("/files/referentiels/upload",{method:"POST",body:fd});
+    if(!res.ok){const e=await res.json();throw new Error(e.detail)}
+    const item=await res.json();
+    setStatus("upload-ref-status",`✓ "${item.filename}" ajouté`,true);
+    await loadReferentiels(item.path);
+  }catch(e){setStatus("upload-ref-status","Erreur : "+e.message,false)}
+}
+
+async function loadReferentiels(autoSelect=null){
+  const list=await fetch("/files/referentiels").then(r=>r.json());
+  const el=document.getElementById("ref-list");
+  if(!list.length){el.innerHTML='<p style="color:#aaa;font-size:.78em">Aucun fichier.</p>';return}
+  if(autoSelect)selectedRef=autoSelect;
+  el.innerHTML=list.map(f=>`
+    <div class="file-item${selectedRef===f.path?" checked":""}" onclick="selectRef('${f.path}',this)">
+      <input type="radio" name="ref" value="${f.path}"${selectedRef===f.path?" checked":""}>
+      <label>${f.filename}</label>
+    </div>`).join("");
+}
+
+function selectRef(path,div){
+  selectedRef=path;
+  document.querySelectorAll("#ref-list .file-item").forEach(d=>{
+    d.classList.remove("checked");
+    d.querySelector("input").checked=false;
+  });
+  div.classList.add("checked");
+  div.querySelector("input").checked=true;
+}
+
+// ── context docs ──────────────────────────────────────────────────────────────
+async function uploadCtx(file){
+  if(!file)return;
+  setStatus("upload-ctx-status","Envoi…",null);
+  const fd=new FormData();fd.append("file",file);
+  try{
+    const res=await fetch("/files/context/upload",{method:"POST",body:fd});
+    if(!res.ok){const e=await res.json();throw new Error(e.detail)}
+    const item=await res.json();
+    setStatus("upload-ctx-status",`✓ "${item.filename}" ajouté`,true);
+    selectedCtx.add(item.path);
+    await loadContextDocs();
+  }catch(e){setStatus("upload-ctx-status","Erreur : "+e.message,false)}
+}
+
+async function loadContextDocs(){
+  const list=await fetch("/files/context").then(r=>r.json());
+  const el=document.getElementById("ctx-list");
+  if(!list.length){el.innerHTML='<p style="color:#aaa;font-size:.78em">Aucun fichier.</p>';return}
+  el.innerHTML=list.map(f=>`
+    <div class="file-item${selectedCtx.has(f.path)?" checked":""}" onclick="handleClick(event,this)">
+      <input type="checkbox" value="${f.path}"${selectedCtx.has(f.path)?" checked":""}>
+      <label>${f.filename}</label>
+    </div>`).join("");
+}
+
+// ── agent prompts ─────────────────────────────────────────────────────────────
+const AGENT_LABELS = {validateur:"Agent 1 — Validateur",summarizer:"Agent 2 — Summarizer",analyste:"Agent 4 — Analyste",evaluateur:"Agent 5 — Évaluateur"};
+
+async function loadAgentPrompts(){
+  const prompts=await fetch("/agents/prompts").then(r=>r.json());
+  const el=document.getElementById("prompts-container");
+  el.innerHTML=Object.entries(prompts).map(([key,text])=>`
+    <div class="prompt-label">${AGENT_LABELS[key]||key}</div>
+    <textarea id="prompt-${key}" rows="4">${esc(text)}</textarea>
+  `).join("");
+}
+
+function getSystemPrompts(){
+  const result={};
+  ["validateur","summarizer","analyste","evaluateur"].forEach(k=>{
+    const el=document.getElementById("prompt-"+k);
+    if(el && el.value.trim()) result[k]=el.value.trim();
+  });
+  return result;
+}
+
+// ── generic list helpers ──────────────────────────────────────────────────────
+function handleClick(event,div){
+  const cb=div.querySelector("input[type=checkbox]");
+  if(!cb)return;
+  if(event.target.tagName==="INPUT"){div.classList.toggle("checked",cb.checked)}
+  else{cb.checked=!cb.checked;div.classList.toggle("checked",cb.checked)}
+  const listId=div.closest("[id]").id;
+  syncToggle(listId); updateBtn();
+}
+
+function toggleAll(listId){
+  const cbs=[...document.querySelectorAll("#"+listId+" input[type=checkbox]")];
+  const allOn=cbs.every(c=>c.checked);
+  cbs.forEach(c=>{c.checked=!allOn;c.closest(".file-item").classList.toggle("checked",!allOn)});
+  syncToggle(listId); updateBtn();
+}
+
+function syncToggle(listId){
+  const btn=document.querySelector(`[onclick="toggleAll('${listId}')"]`);
+  if(!btn)return;
+  const cbs=[...document.querySelectorAll("#"+listId+" input[type=checkbox]")];
+  btn.textContent=cbs.length&&cbs.every(c=>c.checked)?"Tout désélectionner":"Tout sélectionner";
+}
+
+function updateBtn(){
+  document.getElementById("btn-analyse").disabled=
+    ![...document.querySelectorAll("#proc-list input[type=checkbox]:checked")].length;
+}
+
+function setStatus(id,msg,ok){
+  const el=document.getElementById(id); if(!el)return;
+  el.textContent=msg; el.className="upload-status"+(ok===true?" ok":ok===false?" err":"");
+}
+
+// ── progress ──────────────────────────────────────────────────────────────────
+const NODE_LABELS_FR = {
+  extraction_all:"Extraction",summarizer:"Summarizer",formatter:"Formatter",
+  validate_all:"Validation",analyse_evaluate_all:"Analyse & Évaluation",rapport_all:"Rapports",
+};
+let _doneNodes = 0;
+const TOTAL_NODES = 6;
+
+function initProgress(){
+  _doneNodes = 0;
+  _activeNode = null;
+  document.getElementById("progress-bar-wrap").style.display="block";
+  document.getElementById("sub-progress").style.display="none";
+  setProgress(0, TOTAL_NODES, "Démarrage…");
+}
+
+function setProgress(done, total, name){
+  const pct = Math.round(done / total * 100);
+  document.getElementById("step-current").textContent = done;
+  document.getElementById("step-total").textContent   = total;
+  document.getElementById("step-name").textContent    = name;
+  document.getElementById("step-pct").textContent     = pct + "%";
+  document.getElementById("progress-fill").style.width = pct + "%";
+  document.getElementById("progress-fill").style.background =
+    pct === 100 ? "#27ae60" : "#2980b9";
+}
+
+function setSubProgress(current, total, label){
+  const el = document.getElementById("sub-progress");
+  if(total <= 0){ el.style.display="none"; return; }
+  el.style.display = "flex";
+  const pct = Math.round(current / total * 100);
+  document.getElementById("sub-label").textContent = label || "";
+  document.getElementById("sub-fill").style.width  = pct + "%";
+  document.getElementById("sub-pct").textContent   = `${current}/${total}`;
+}
+
+function handleProgress(ev){
+  setSubProgress(ev.current, ev.total, ev.label ? `${ev.node === "validate_all" ? "Validation" : "Analyse"} : ${ev.label}` : "");
+}
+
+// ── graph ─────────────────────────────────────────────────────────────────────
+function initGraph(){
+  const el=document.getElementById("pipeline-graph");
+  el.innerHTML=NODE_ORDER.map((n,i)=>`
+    ${i>0?'<div class="p-arrow">›</div>':""}
+    <div class="p-node">
+      <div class="p-node-box pending" id="node-${n}">
+        <div class="status-dot"></div>
+        <div class="icon">${NODE_META[n].icon}</div>
+        <div class="lbl">${NODE_META[n].label}</div>
+      </div>
+    </div>`).join("");
+  document.getElementById("graph-panel").style.display="block";
+}
+function setNodeState(node,state){
+  const el=document.getElementById("node-"+node); if(el) el.className="p-node-box "+state;
+}
+
+// ── log ───────────────────────────────────────────────────────────────────────
+function initLog(){
+  logCount=0;
+  document.getElementById("log-list").innerHTML="";
+  document.getElementById("log-panel").style.display="block";
+  document.getElementById("log-count").textContent="";
+}
+
+function addLogEntry(event){
+  logCount++;
+  const color=NODE_COLORS[event.node]||"#7f8c8d";
+  const typeLabels={node_start:"▶ Démarrage",node_end:"✓ Terminé",node_error:"✗ Erreur",llm_start:"↑ Prompt",llm_end:"↓ Réponse"};
+  const id="log-"+logCount;
+  let bodyHtml="";
+  if(event.type==="node_start"||event.type==="node_end"){
+    const k=event.type==="node_start"?"input":"output";
+    bodyHtml=`<div class="log-section">${k==="input"?"Entrée":"Sortie"}</div><pre>${esc(JSON.stringify(event[k],null,2))}</pre>`;
+  }else if(event.type==="llm_start"){
+    bodyHtml=event.messages.map(m=>`<div class="log-section">${m.role.toUpperCase()}</div><pre>${esc(m.content)}</pre>`).join("");
+  }else if(event.type==="llm_end"){
+    bodyHtml=`<div class="log-section">RÉPONSE</div><pre>${esc(event.response)}</pre>`;
+  }else if(event.type==="node_error"){
+    bodyHtml=`<div class="log-section">ERREUR</div><pre style="color:#e74c3c">${esc(event.error)}</pre>`;
+  }
+  const html=`<div class="log-entry" id="${id}">
+    <div class="log-header" onclick="document.getElementById('${id}').classList.toggle('open')">
+      <span class="log-node-tag" style="background:${color}">${NODE_META[event.node]?.label||event.node}</span>
+      <span class="log-type">${typeLabels[event.type]||event.type}</span>
+      <span class="log-chevron">›</span>
+    </div>
+    <div class="log-body">${bodyHtml}</div>
+  </div>`;
+  const list=document.getElementById("log-list");
+  list.insertAdjacentHTML("beforeend",html);
+  list.scrollTop=list.scrollHeight;
+  document.getElementById("log-count").textContent=`(${logCount})`;
+}
+
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+
+// ── analyse ───────────────────────────────────────────────────────────────────
+function runAnalyse(){
+  const procedures=[...document.querySelectorAll("#proc-list input[type=checkbox]:checked")].map(c=>c.value);
+  if(!procedures.length)return;
+  const extra_context_docs=[...document.querySelectorAll("#ctx-list input[type=checkbox]:checked")].map(c=>c.value);
+  const system_prompts=getSystemPrompts();
+  const body={procedures,extra_context_docs,system_prompts};
+  if(selectedRef)body.referentiel_path=selectedRef;
+
+  document.getElementById("btn-analyse").disabled=true;
+  document.getElementById("error-box").style.display="none";
+  document.getElementById("results").style.display="none";
+  document.getElementById("empty").style.display="none";
+  initProgress(); initGraph(); initLog();
+
+  fetch("/analyse/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    .then(res=>{
+      if(!res.ok)return res.json().then(e=>{throw new Error(e.detail||res.statusText)});
+      const reader=res.body.getReader(); const decoder=new TextDecoder(); let buf="";
+      function read(){
+        reader.read().then(({done,value})=>{
+          if(done){document.getElementById("btn-analyse").disabled=false;return}
+          buf+=decoder.decode(value,{stream:true});
+          buf.split("\n").forEach((line,i,arr)=>{
+            if(i===arr.length-1){buf=line;return}
+            if(line.startsWith("data: ")){try{handleEvent(JSON.parse(line.slice(6)))}catch(_){}}
+          });
+          read();
+        });
+      }
+      read();
+    })
+    .catch(e=>{
+      document.getElementById("error-box").textContent="Erreur : "+e.message;
+      document.getElementById("error-box").style.display="block";
+      document.getElementById("btn-analyse").disabled=false;
+    });
+}
+
+function handleEvent(ev){
+  if(ev.type==="node_start"){
+    // infer completion of previous node when the next one starts
+    if(_activeNode && _activeNode !== ev.node){
+      setNodeState(_activeNode,"done");
+      _doneNodes++;
+      document.getElementById("sub-progress").style.display="none";
+    }
+    _activeNode = ev.node;
+    setNodeState(ev.node,"running");
+    setProgress(_doneNodes, TOTAL_NODES, NODE_LABELS_FR[ev.node]||ev.node);
+    addLogEntry(ev);
+
+  } else if(ev.type==="node_end"){
+    // fire if the callback does provide node_end (belt-and-suspenders)
+    if(_activeNode === ev.node){
+      setNodeState(ev.node,"done");
+      _doneNodes++;
+      _activeNode = null;
+      document.getElementById("sub-progress").style.display="none";
+      setProgress(_doneNodes, TOTAL_NODES, (NODE_LABELS_FR[ev.node]||ev.node)+" ✓");
+    }
+    addLogEntry(ev);
+
+  } else if(ev.type==="node_error"){
+    setNodeState(ev.node,"error");
+    _activeNode = null;
+    addLogEntry(ev);
+
+  } else if(ev.type==="llm_start"||ev.type==="llm_end"){
+    addLogEntry(ev);
+
+  } else if(ev.type==="progress"){
+    handleProgress(ev);
+
+  } else if(ev.type==="done"){
+    // mark last running node done
+    if(_activeNode){
+      setNodeState(_activeNode,"done");
+      _doneNodes = TOTAL_NODES;
+    }
+    setProgress(TOTAL_NODES, TOTAL_NODES, "Terminé ✓");
+    document.getElementById("sub-progress").style.display="none";
+    renderResults(ev.result);
+
+  } else if(ev.type==="error"){
+    if(_activeNode) setNodeState(_activeNode,"error");
+    document.getElementById("error-box").textContent="Erreur : "+ev.message;
+    document.getElementById("error-box").style.display="block";
+    document.getElementById("btn-analyse").disabled=false;
+  }
+}
+
+// ── results ───────────────────────────────────────────────────────────────────
+function renderResults(data){
+  const all=data.global_summary?[data.global_summary,...data.results]:data.results;
+  const el=document.getElementById("results");
+  el.innerHTML=all.map(r=>renderCard(r,r===data.global_summary)).join("");
+  el.style.display="flex";
+  document.getElementById("btn-analyse").disabled=false;
+}
+
+function renderCard(r,isGlobal){
+  const color=C_LEV[r.niveau_global]||"#7f8c8d";
+  const border=isGlobal?`border:2px solid ${color}`:"";
+  return `<div class="result-card" style="${border}">
+    <div class="result-card-header" style="background:${color}11">
+      <h3>${isGlobal?"Rapport Global":r.procedure_name}</h3>
+      <span class="badge" style="background:${color}">${r.niveau_global}</span>
+      <a class="report-link" href="/rapports/${encodeURIComponent(r.rapport_html.replace('rapports/',''))}" target="_blank">📄 Rapport HTML</a>
+    </div>
+    <div class="result-card-body">
+      <div class="score-wrap">
+        <div class="score-label">Score de conformité</div>
+        <div class="gauge-track"><div class="gauge-fill" style="width:${r.score_global}%;background:${color}">${r.score_global}%</div></div>
+      </div>
+      <div class="stat"><div class="stat-n" style="color:#555">${r.nb_concernes}</div><div class="stat-label">Concernées</div></div>
+      <div class="stat"><div class="stat-n" style="color:#27ae60">${r.nb_conformes}</div><div class="stat-label">Conformes</div></div>
+      <div class="stat"><div class="stat-n" style="color:#f39c12">${r.nb_partiels}</div><div class="stat-label">Partiellement</div></div>
+      <div class="stat"><div class="stat-n" style="color:#e74c3c">${r.nb_non_conformes}</div><div class="stat-label">Non conformes</div></div>
+      <div class="resume-box">${r.resume_executif}</div>
+    </div>
+  </div>`;
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+loadProcedures();
+loadReferentiels();
+loadContextDocs();
+loadAgentPrompts();
+</script>
+</body>
+</html>
