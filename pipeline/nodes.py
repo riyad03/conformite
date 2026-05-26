@@ -135,9 +135,13 @@ def node_validate_all(state: dict) -> dict:
             if done % 20 == 0 or done == total_pairs:
                 print(f"  [{done}/{total_pairs}] validé")
 
-    # save per-procedure validation HTML
+    # save per-procedure validation reports
     for path, results in validation_results.items():
         _save_validation_report(path, results, state)
+
+    # save global validation report when multiple procedures
+    if len(validation_results) > 1:
+        _save_global_validation_report(validation_results, state)
 
     nb_total = sum(len(v) for v in validated_req_ids.values())
     print(f"  [OK] {nb_total} paires (req × proc) retenues")
@@ -154,6 +158,95 @@ def _save_validation_report(path: str, results: dict, state: dict) -> None:
     )
     html = generate_validation_html(ordered, proc_name, state["selected_processes"])
     (out_dir / f"validation_{stem}.html").write_text(html, encoding="utf-8")
+
+
+def _save_global_validation_report(validation_results: dict[str, dict], state: dict) -> None:
+    """Build a cross-procedure validation matrix and save as JSON + HTML."""
+    out_dir      = RAPPORTS_DIR; out_dir.mkdir(exist_ok=True)
+    requirements = state["requirements"]
+    proc_names   = [Path(p).name for p in validation_results]
+
+    # ── JSON: requirement → {req_text, procedures: {proc_name: {is_relevant, reason}}} ──
+    matrix: dict = {}
+    for rid in requirements:
+        matrix[rid] = {
+            "req_id":   rid,
+            "req_text": requirements[rid],
+            "procedures": {
+                Path(p).name: {
+                    "is_relevant": validation_results[p].get(rid, {}).get("is_relevant", False),
+                    "reason":      validation_results[p].get(rid, {}).get("reason", ""),
+                }
+                for p in validation_results
+            },
+        }
+    (out_dir / "validation_global.json").write_text(
+        json.dumps(list(matrix.values()), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    # ── HTML: matrix table (rows = requirements, cols = procedures) ──────────────
+    from datetime import datetime
+    RED, DARK = "#c0392b", "#1a1a1a"
+
+    header_cells = "".join(
+        f"<th style='background:{DARK};color:#fff;padding:8px 10px;white-space:nowrap;font-size:.78em'>{n}</th>"
+        for n in proc_names
+    )
+    rows = ""
+    for rid, data in matrix.items():
+        cells = "".join(
+            "<td style='text-align:center;padding:6px 8px'>"
+            + (
+                "<span style='background:#27ae60;color:#fff;padding:2px 8px;border-radius:4px;font-size:.75em;font-weight:bold'>✓</span>"
+                if data["procedures"][pn]["is_relevant"] else
+                "<span style='color:#aaa;font-size:.75em'>—</span>"
+            )
+            + "</td>"
+            for pn in proc_names
+        )
+        nb_concerned = sum(1 for pn in proc_names if data["procedures"][pn]["is_relevant"])
+        rows += (
+            f"<tr style='vertical-align:middle'>"
+            f"<td style='padding:7px 10px;font-size:.80em;font-weight:bold;white-space:nowrap'>{rid}</td>"
+            f"<td style='padding:7px 10px;font-size:.76em;color:#555;max-width:300px'>"
+            f"{data['req_text'][:120]}{'…' if len(data['req_text'])>120 else ''}</td>"
+            f"<td style='text-align:center;padding:7px 8px;font-weight:bold;color:{'#c0392b' if nb_concerned else '#aaa'}'>{nb_concerned}/{len(proc_names)}</td>"
+            f"{cells}</tr>"
+        )
+
+    total_req   = len(requirements)
+    total_pairs = sum(
+        1 for data in matrix.values()
+        for pn in proc_names if data["procedures"][pn]["is_relevant"]
+    )
+
+    css = ("*{box-sizing:border-box}body{font-family:Arial,sans-serif;max-width:1400px;margin:0 auto;"
+           "padding:0 24px 40px;font-size:13px;line-height:1.5}"
+           "table{width:100%;border-collapse:collapse}td,th{border:1px solid #e0e0e0;word-break:break-word}"
+           "tr:nth-child(even){background:#f8f9fa}tr:hover{background:#fef5f5}")
+
+    html = (
+        f'<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">'
+        f'<title>Validation Globale</title><style>{css}</style></head><body>'
+        f'<div style="background:{RED};padding:16px 28px;margin-bottom:24px">'
+        f'<div style="color:#fff;font-weight:900;letter-spacing:2px">BFS CONSULTING</div>'
+        f'<div style="color:#ffcccc;font-size:.82em">Governance &bull; Risk &bull; Compliance</div></div>'
+        f'<h1 style="color:{DARK};margin-bottom:6px">Rapport de Validation Global</h1>'
+        f'<p style="color:#666;font-size:.88em;margin-bottom:20px">'
+        f'{len(proc_names)} procédures &nbsp;·&nbsp; {total_req} exigences &nbsp;·&nbsp; '
+        f'{total_pairs} paires concernées &nbsp;·&nbsp; {datetime.now().strftime("%d/%m/%Y")}</p>'
+        f'<table><thead><tr style="background:{DARK}">'
+        f'<th style="color:#fff;padding:8px 10px;text-align:left;min-width:120px">Référence</th>'
+        f'<th style="color:#fff;padding:8px 10px;text-align:left">Exigence</th>'
+        f'<th style="color:#fff;padding:8px 10px;white-space:nowrap">Concernée par</th>'
+        f'{header_cells}'
+        f'</tr></thead><tbody>{rows}</tbody></table>'
+        f'<div style="text-align:center;color:#aaa;font-size:.78em;margin-top:32px;border-top:1px solid #eee;padding-top:12px">'
+        f'BFS Consulting &copy; {datetime.now().year} &mdash; {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>'
+        f'</body></html>'
+    )
+    (out_dir / "validation_global.html").write_text(html, encoding="utf-8")
+    print("  [OK] validation_global.html + validation_global.json")
 
 
 # ── node 5: analyse + evaluate (ALL req × proc pairs in parallel) ────────────
@@ -217,13 +310,14 @@ def node_analyse_evaluate_all(state: dict) -> dict:
     return {"analyses": analyses, "total_eval_iters": total_iters}
 
 
-# ── node 6: build all reports ─────────────────────────────────────────────────
+# ── node 6: build global report only ─────────────────────────────────────────
 
 def node_rapport_all(state: dict) -> dict:
-    print("\n[RAPPORT] Construction des rapports...")
+    print("\n[RAPPORT] Construction du rapport global...")
+    llm      = get_llm()
     rapports: dict[str, RapportFinal] = {}
-    llm = get_llm()
 
+    # build and save individual procedure reports
     for path, path_analyses in state["analyses"].items():
         if not path_analyses:
             continue
@@ -231,11 +325,10 @@ def node_rapport_all(state: dict) -> dict:
         rapports[path] = rapport
         _save_rapport(rapport, path)
 
-    # global report when multiple procedures
-    if len(rapports) > 1:
-        global_rapport = _build_global(rapports, state, llm)
-        _save_global_rapport(global_rapport)
-        rapports["__global__"] = global_rapport
+    # always produce one single global report
+    global_rapport = _build_global(rapports, state, llm)
+    _save_global_rapport(global_rapport)
+    rapports["__global__"] = global_rapport
 
     return {"rapports": rapports}
 

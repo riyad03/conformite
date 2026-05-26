@@ -43,11 +43,19 @@ class RequirementAnalysis(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def coerce_list_fields(cls, data):
+        import json
         if not isinstance(data, dict):
             return data
         for field in ("actions", "processus_impactes", "directions_proprietaires"):
-            if isinstance(data.get(field), list):
-                data[field] = [_to_str(item) for item in data[field]]
+            val = data.get(field)
+            if isinstance(val, list):
+                data[field] = [_to_str(item) for item in val]
+            elif isinstance(val, str):
+                try:
+                    parsed = json.loads(val)
+                    data[field] = [_to_str(item) for item in parsed] if isinstance(parsed, list) else [val]
+                except (json.JSONDecodeError, ValueError):
+                    data[field] = [val] if val.strip() else []
         return data
 
 

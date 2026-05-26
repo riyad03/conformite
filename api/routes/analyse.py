@@ -43,14 +43,9 @@ def _resolve(request: AnalyseRequest) -> tuple[AppConfig, list[str]]:
 
 
 def _rapports_to_response(rapports: dict) -> AnalyseResponse:
-    results = [
-        _to_summary(r, p)
-        for p, r in rapports.items()
-        if p != "__global__" and r is not None
-    ]
     global_r = rapports.get("__global__")
     return AnalyseResponse(
-        results=results,
+        results=[],
         global_summary=_to_summary(global_r, "__global__") if global_r else None,
     )
 
@@ -116,6 +111,52 @@ async def analyse_stream(request: AnalyseRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/rapport", response_model=None)
+def get_rapport():
+    from fastapi.responses import JSONResponse
+    from module_folder.config import RAPPORTS_DIR
+    from module_folder.models import RapportFinal
+
+    path = RAPPORTS_DIR / "rapport_global.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Rapport introuvable.")
+    return JSONResponse(content=RapportFinal.model_validate_json(path.read_text(encoding="utf-8")).model_dump(mode="json"))
+
+
+@router.get("/rapport/html", response_model=None)
+def get_rapport_html():
+    from fastapi.responses import HTMLResponse
+    from module_folder.config import RAPPORTS_DIR
+
+    path = RAPPORTS_DIR / "rapport_global.html"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Rapport HTML introuvable.")
+    return HTMLResponse(content=path.read_text(encoding="utf-8"))
+
+
+@router.get("/validation", response_model=None)
+def get_validation():
+    from fastapi.responses import JSONResponse
+    from module_folder.config import RAPPORTS_DIR
+    import json
+
+    path = RAPPORTS_DIR / "validation_global.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Validation introuvable.")
+    return JSONResponse(content=json.loads(path.read_text(encoding="utf-8")))
+
+
+@router.get("/validation/html", response_model=None)
+def get_validation_html():
+    from fastapi.responses import HTMLResponse
+    from module_folder.config import RAPPORTS_DIR
+
+    path = RAPPORTS_DIR / "validation_global.html"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Validation HTML introuvable.")
+    return HTMLResponse(content=path.read_text(encoding="utf-8"))
 
 
 def _resolve_sync(request: AnalyseRequest) -> tuple[AppConfig, list[str]]:
